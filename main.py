@@ -1,8 +1,9 @@
 import streamlit as st
+import pandas as pd
 import time
+import urllib.parse
 
-# ----------------------------------------
-# Disease and symptom database
+
 disease_data = {
     "Flu": ["fever", "cough", "sore throat", "body ache", "fatigue"],
     "COVID-19": ["fever", "dry cough", "loss of smell", "fatigue", "shortness of breath"],
@@ -13,10 +14,21 @@ disease_data = {
     "Migraine": ["headache", "nausea", "sensitivity to light", "blurred vision"]
 }
 
-# Unique symptoms
-all_symptoms = sorted(set(symptom for symptoms in disease_data.values() for symptom in symptoms))
 
-# Prediction logic
+doctor_map = {
+    "Flu": "General Practitioner",
+    "COVID-19": "General Practitioner or Infectious Disease Specialist",
+    "Malaria": "Infectious Disease Specialist",
+    "Diabetes": "Endocrinologist",
+    "Hypertension": "Cardiologist",
+    "Common Cold": "General Practitioner",
+    "Migraine": "Neurologist"
+}
+
+
+minor_diseases = {"Flu", "Common Cold", "Migraine"}
+
+
 def predict_disease(selected_symptoms):
     scores = {}
     for disease, symptoms in disease_data.items():
@@ -26,53 +38,93 @@ def predict_disease(selected_symptoms):
     best_match = max(scores, key=scores.get)
     return best_match, scores
 
-# ----------------------------------------
-# Page config
-st.set_page_config(page_title="Symptom Checker", page_icon="🩺", layout="wide")
+st.set_page_config(page_title="AI Symptom Checker", page_icon="🩺", layout="wide")
 
-# ----------------------------------------
-# Header
-st.markdown("<h2 style='text-align: center;'>🩺 Symptom Checker</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Enter symptoms on the left to view likely conditions on the right.</p>", unsafe_allow_html=True)
-st.markdown("---")
+st.markdown("""
+<style>
+    body {
+        font-family: 'Segoe UI', sans-serif;
+    }
+    .main-title {
+        text-align: center;
+        font-size: 2.8em;
+        font-weight: bold;
+        margin-bottom: 0px;
+        color: #1a6ed8;
+    }
+    .subtitle {
+        text-align: center;
+        font-size: 1.2em;
+        color: #cccccc;
+        margin-bottom: 2rem;
+    }
+    .section-title {
+        font-size: 1.3em;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: #aaaaaa;
+    }
+    .result-box {
+        background-color: #123524;
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-weight: 600;
+    }
+    .link {
+        margin-bottom: 0.5rem;
+        font-size: 0.95rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# ----------------------------------------
-# Columns Layout
-left_col, right_col = st.columns(2)
 
-with left_col:
-    st.subheader("Step 1: Enter Your Symptoms")
+st.markdown("<div class='main-title'>🩺 AI Symptom Checker</div>", unsafe_allow_html=True)
+st.markdown("<div class='subtitle'>Enter your symptoms and get a prediction with doctor suggestions</div>", unsafe_allow_html=True)
 
-    input_mode = st.radio("Input Method:", ["Type Symptoms", "Pick from List"], horizontal=True)
 
-    if input_mode == "Type Symptoms":
-        typed_input = st.text_input("Comma-separated symptoms:", placeholder="e.g. fever, nausea, headache")
-        selected_symptoms = [s.strip().lower() for s in typed_input.split(",") if s.strip()]
-    else:
-        selected_symptoms = st.multiselect("Select symptoms (limited view):", options=all_symptoms, max_selections=5)
+col1, col2 = st.columns(2)
 
-    submit = st.button("Check Condition")
+with col1:
+    st.markdown("<div class='section-title'>Step 1: Input Symptoms</div>", unsafe_allow_html=True)
+    symptom_input = st.text_input("Describe your symptoms (comma-separated):", placeholder="e.g. fever, headache, nausea")
+    submitted = st.button("🔍 Predict Disease")
 
-with right_col:
-    st.subheader("Step 2: Predicted Result")
+with col2:
+    st.markdown("<div class='section-title'>Step 2: Result & Suggestions</div>", unsafe_allow_html=True)
 
-    if submit:
-        if not selected_symptoms:
-            st.warning("Please enter or select symptoms.")
+    if submitted:
+        selected = [s.strip().lower() for s in symptom_input.split(",") if s.strip()]
+        if not selected:
+            st.warning("Please enter some symptoms first.")
         else:
-            with st.spinner("Analyzing..."):
-                time.sleep(1)
-                predicted, scores = predict_disease(selected_symptoms)
-            
-            st.success(f"Most likely: **{predicted}**")
+            with st.spinner("Analyzing your symptoms..."):
+                time.sleep(1.5)
+                prediction, scores = predict_disease(selected)
 
-            st.markdown("#### Match Breakdown")
-            sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+            st.markdown(f"<div class='result-box'>Most likely condition: {prediction}</div>", unsafe_allow_html=True)
 
-            for disease, score in sorted_scores:
-                st.markdown(f"- **{disease}** → {score}% match")
+            recommended_doctor = doctor_map.get(prediction, "General Practitioner")
+            st.markdown(f"**Suggested Specialist:** _{recommended_doctor}_")
 
-# ----------------------------------------
-# Footer
-st.markdown("---")
-st.markdown("<small style='color: gray;'>This tool is for educational use only. Consult a doctor for real diagnosis.</small>", unsafe_allow_html=True)
+            search_term = urllib.parse.quote_plus(recommended_doctor)
+            st.markdown(f'🔗 [Find on Zocdoc](https://www.zocdoc.com/search?searchSource=Homepage&query={search_term})')
+            st.markdown(f'🗺️ [Google Maps Nearby](https://www.google.com/maps/search/{search_term}+near+me)')
+
+            if prediction in minor_diseases:
+                st.info("💡 This may be a minor condition. Consider using a **telemedicine** service.")
+
+            # Match Scores
+            st.markdown("### 📊 Match Scores:")
+            df = pd.DataFrame(scores.items(), columns=["Disease", "Match (%)"])
+            st.dataframe(df.sort_values("Match (%)", ascending=False), use_container_width=True)
+    else:
+        st.markdown("<i>Results will appear here once you submit your symptoms.</i>", unsafe_allow_html=True)
+
+# -----------------------
+# Disclaimer
+st.markdown("""
+---
+> ⚠️ **Disclaimer**: This tool is for educational use only and does not replace professional medical advice. Always consult a licensed healthcare provider.
+""")
